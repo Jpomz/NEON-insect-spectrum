@@ -1,0 +1,45 @@
+Notes:
+
+Filter out damaged individuals when measurement is affected?
+2018 ~ 15.6% of observations are damaged
+str_subset(macro$inv_taxonomyProcessed$sampleCondition, "measurement")
+Run models with and without
+--> need to rerun script 1 and remove damaged individuals, re-bin, join temp, etc. 
+
+Filter out smallest and largest individuals?
+
+LW coeffs:
+what percent of data has LW coefs?
+Find more equations to complete this?
+~right now its at ~95%, I think we're good
+
+Temperature data:
+Only for wadeable streams --> looks like nonwadeable streams and lake temps are in DP1.20264.001
+
+what to do when significant observations are missing? Filter out so only using sites with full years of data?
+[DECISION 6/19] filter out sites that have >=200 days of temperature observations --> only lose 6 sampling events
+
+NOTE!!!!
+Temperature data download as of ~7/7 changed. I didn't save orginal download, so not sure exactly what changed, but I do know that we did have ~90 site:season:year combinations that had > 200 daily temperature observations, and now we only have ~8. 
+I emailed NEON on 7/9, but have not yeat heard back. I'm hoping this is a glitch and the data will come back and that it wasn't erroneous or removed for QA/QC or something. 
+
+Functions:
+Continue testing est_dw() function
+make an RMSE function?
+
+to do list (6/18/20):
+1) download data - done
+2) wrangle data - need to filter out damaged - done
+3) model data - decide which models to test / select / average
+  model 1 in 2a is best (N~M*dd(1|site)(1|year))
+4) predict 2019 data
+5) assess predictions / model performance / RMSE
+
+6/23 --> read up on RMSE
+
+
+Predicting for unknown values (i.e. degree_days in AMD data) estimate with mean(), or possibly implement some bayesian method to impute degree_days value from distribution?
+
+McGarvey Kirk: # "correct" mcgarvey intercepts so they match NEON, see if slopes are the same?
+
+Make function for my full site fit/prediction multipanel ggplot
