@@ -3,5 +3,8 @@
 .RData
 .Ruserdata
 ms
+<<<<<<< HEAD
 scripts/2b_modelling_full_data.R
 scripts/oldies prolly not goodies.R
+=======
+>>>>>>> 4fddd77d6820ad6251c05b81e8af708062a92832
