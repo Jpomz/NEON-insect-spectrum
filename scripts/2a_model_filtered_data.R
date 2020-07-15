@@ -73,21 +73,19 @@ get_prior(data = dat,
 my_priors <- c(prior(normal(-2, 2), class = "b", coef = "log_mids_center"),
                prior(normal(0,1), class = "b"),
                prior(normal(4.25, 2), class = "Intercept"),
-               prior(cauchy(0, 0.1), class = "sigma"),
-               prior(cauchy(0,0.1), class = "sd"))
+               prior(exponential(1), class = "sigma"),
+               prior(exponential(1), class = "sd"))
 
 # Bayesian Model
 mod <- brm(data = dat,
            log_count_corrected ~
              log_mids_center * log10(degree_days) +
-             (1+ log10(degree_days)*log_mids_center|siteID) + (1|year), 
+             (1 + log_mids_center*log10(degree_days)|siteID) + (1|year), 
            family = gaussian(),
            prior = my_priors,
            chains = 4, 
            iter = 4000,
-           cores = 4,
-           control = list(adapt_delta = 0.99,
-                          max_treedepth = 12))
+           cores = 4)
 print(mod)
 
 # prior vs posterior plot ####
@@ -136,6 +134,7 @@ plot(conditional_effects(mod), points = TRUE)
 # saveRDS(mod, "data/dd_as_r_slope_6-30-20.RDS") # r slopes after talking with JSW 6/30
 
 # mod <- readRDS("data/dd_as_r_slope_6-30-20.RDS") # r slopes after talking with JSW 6/30
+
 
 # slope beta distributions ------------------------------------------------
 
@@ -654,3 +653,148 @@ fig.2d <- new.pred.2019 %>%
 grid.arrange(fig.2a, fig.2b, fig.2c, fig.2d)
 g <- arrangeGrob(fig.2a, fig.2b, fig.2c, fig.2d, nrow = 2)
 ggsave("ms/fig2.png", g)
+
+
+
+
+# Wesner_Predict slopes-------------------------------------------------
+
+# Get least squares estimates ---------------------------------------------
+# compute least squares regressions for each site/year/degree_day combo
+lms <- lmList(log_count_corrected ~ log_mids_center | group, data = dat_all)
+
+#get coefficients
+lms_coefs <- coef(lms) %>% rownames_to_column() %>% clean_names() %>% 
+  rename(group = rowname,
+         int= intercept,
+         slope = log_mids_center) %>% 
+  mutate(year = str_sub(group,-4,-1),
+         site = str_sub(group, 1, 4),
+         degree_days = parse_number(str_sub(group, -50, -6))) %>% 
+  glimpse()
+
+#select columns
+lms_combine <- lms_coefs %>% select(site, year, degree_days, slope)
+
+
+# posterior slopes for sites with past data
+postsnew4 <- posterior_samples(mod) %>% clean_names() %>% mutate(iter = 1:nrow(.)) %>% 
+  select(!contains("cor_site")) %>% 
+  pivot_longer(contains("r_site"), names_to = "ranef", values_to = "offset") %>%
+  mutate(site = str_sub(ranef, 11,14),
+         ranef = str_sub(ranef, 16)) %>% 
+  pivot_wider(names_from = ranef, values_from = offset) %>%
+  mutate(site = toupper(site)) %>% 
+  left_join(lms_combine) %>%
+  # mutate(slope_mod = b_log_mids_center + log_mids_center + (b_log_mids_center_log10degree_days + log_mids_center_log10degree_days)*log10(degree_days)) %>%
+  # mutate(slope_mod = b_log_mids_center + rnorm(nrow(.), 0, sd_site_id_log_mids_center) + (b_log_mids_center_log10degree_days + rnorm(nrow(.), 0, sd_site_id_log_mids_center_log10degree_days))*log10(degree_days)) %>%
+  mutate(slope_mod = b_log_mids_center + log_mids_center) %>%
+  mutate(group = paste0(site, round(degree_days,0)),
+         model = "siterandom_year",
+         prediction_level = "Site in original model") %>% 
+  glimpse()
+
+# posterior slopes for sites with data only in 2019
+postsnew4_2019 <- postsnew4 %>% filter(site %in% c("WLOU", "WALK", "REDB")) %>% #just chose 3 existing sites as placeholders
+  left_join(lms_combine) %>%
+  mutate(site = case_when(site == "WLOU" ~ "SYCA",
+                          site == "WALK" ~ "BLUE",
+                          site == "REDB" ~ "BLDE"),
+         slope_mod = b_log_mids_center + rnorm(nrow(.), 0, sd_site_id_log_mids_center)) %>% 
+  # slope_mod = b_log_mids_center + rnorm(nrow(.), 0, sd_site_id_log_mids_center) + (b_log_mids_center_log10degree_days + rnorm(nrow(.), 0, sd_site_id_log_mids_center_log10degree_days))*log10(degree_days)) %>%
+  mutate(group = paste0(site, round(degree_days,0)),
+         model = "siterandom_year",
+         prediction_level = "Site not in original model") %>% 
+  glimpse()
+
+# combine predictions
+postsnew4_all <- postsnew4 %>% bind_rows(postsnew4_2019) %>% 
+  mutate(order = case_when(prediction_level == "Site not in original model" ~ -100,
+                           TRUE ~ slope_mod))
+
+#make medians for sorting later         
+postsnew4_medians <- postsnew4_all %>%
+  group_by(site, order) %>% 
+  summarize(slope_mod = median(slope_mod))
+
+#add bayes medians to lms coefs
+lms_coefs_plot <- left_join(lms_coefs, postsnew4_medians) %>%
+  glimpse
+
+# combine posteriors and plot against least squares slopes from all samples. Highlight 2019 samples, since that's what we're trying to predict.
+plot_predict_slopes2019 <-  postsnew4_all %>% 
+  # drop_na(slope_mod) %>% 
+  ggplot(aes(x = slope_mod, y = reorder(site, order))) + 
+  geom_halfeyeh(aes(alpha = prediction_level)) +
+  geom_point(data = lms_coefs_plot %>% filter(year == 2019), aes(x = slope), size = 2.5, shape = 21) +
+  # scale_fill_manual(values = "green") +
+  scale_alpha_manual(values = c(1, 0.4)) + 
+  # scale_fill_brewer(type = "seq", palette = 1) +
+  coord_cartesian(xlim = c(-1.8, -1)) +
+  labs(y = "Stream",
+       x = "N ~ M slope") +
+  theme_tidybayes() +
+  theme(legend.title = element_blank())
+
+plot_predict_slopes2019  
+ggsave(plot_predict_slopes2019, file = "plots/plot_predict_slopes2019.png", dpi = 500, width = 6, height = 8)
+
+
+
+# Wesner _ Compare predictions to overfitted model ------------------------
+# simple Bayesian Model - no random effects. Overfitted
+my_newpriors <- c(prior(normal(-2, 2), class = "b", coef = "log_mids_center"),
+                  prior(normal(0,1), class = "b"),
+                  prior(normal(4.25, 2), class = "Intercept"),
+                  prior(exponential(1), class = "sigma"))
+
+mod.new2 <- brm(data = dat,
+                log_count_corrected ~
+                  log_mids_center*log10(degree_days)*siteID, 
+                family = gaussian(),
+                prior = my_newpriors,
+                chains = 1, 
+                iter = 2000,
+                cores = 4)
+
+postsnew2 <- posterior_samples(mod.new2) %>% as_tibble() %>% mutate(iter = 1:nrow(.)) %>% 
+  pivot_longer(contains("siteID"), names_to = "group", values_to = "value") %>% 
+  mutate(site = str_sub(group, -4),
+         group = paste0("site",str_sub(group, -50, -12))) %>% 
+  pivot_wider(names_from = group, values_from = value) %>% 
+  left_join(lms_combine) %>% 
+  clean_names() %>% 
+  # mutate(slope_mod = b_log_mids_center + siteb_log_mids_center + (b_log_mids_center_log10degree_days + siteb_log_mids_center_log10degree_days)*log10(degree_days)) %>%
+  mutate(slope_mod = b_log_mids_center + siteb_log_mids_center) %>%
+  mutate(group = paste0(site, round(degree_days,0)),
+         model = "sitefixed") %>% 
+  glimpse()
+
+#plot to show partial pooling
+plot_predict_all_slopes2019 <-  postsnew4 %>% 
+  bind_rows(postsnew2) %>% 
+  ggplot(aes(x = slope_mod, y = reorder(site, slope_mod), fill = model)) + 
+  geom_halfeyeh() +
+  geom_point(aes(x = slope, color = year),size = 2) +
+  scale_color_manual(values = c("#DEEBF7", "#3182BD", "green")) +
+  # scale_fill_brewer(type = "seq", palette = 1) +
+  # coord_cartesian(xlim = c(-1.8, -0.4)) +
+  theme_tidybayes()
+
+
+# estimate prediction error - how far are median predictions from each model from the actual data in 2019
+prediction_error <- bind_rows(postsnew2, postsnew4) %>% 
+  group_by(model, group) %>% 
+  summarize(median_pred = median(slope_mod)) %>% 
+  mutate(site = str_sub(group, 1,4),
+         degree_days = parse_number(str_sub(group, 5))) %>% 
+  left_join(lms_combine) %>% filter(year == 2019) %>% 
+  mutate(prediction_error = median_pred - slope)
+
+prediction_error %>% 
+  group_by(model) %>% 
+  # median_qi(absolute_error = abs(prediction_error), .width = 1) %>% 
+  ggplot(aes(x = model, y = prediction_error)) +
+  geom_point(position = position_jitter(width = 0.05))
+# geom_pointrange(aes(ymin = .lower, ymax = .upper))
+
