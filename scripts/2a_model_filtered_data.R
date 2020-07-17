@@ -208,7 +208,7 @@ sitedd_slopes_a <- posterior_samples(mod) %>% clean_names() %>% mutate(iter = 1:
   pivot_wider(names_from = ranef, values_from = offset) %>%
   mutate(site = toupper(site)) %>% 
   left_join(lms_combine) %>% glimpse() %>% 
-  mutate(site_slope_dd = b_log_mids_center + r_log_mids_center + (b_log_mids_center_log10degree_days + r_log10degree_days_log_mids_center)*log10(degree_days)) %>%
+  mutate(site_slope_dd20172018 = b_log_mids_center + r_log_mids_center + (b_log_mids_center_log10degree_days + r_log10degree_days_log_mids_center)*log10(degree_days)) %>%
   mutate(group = paste0(site,round(degree_days,0)),
          prediction_level = "Sites in original model") %>% 
   glimpse()
@@ -397,17 +397,22 @@ lms_toplot <- sitedd.slopes %>%
            select(siteID, site_slope_dd, degree_days) %>% 
            group_by(siteID) %>% 
            summarize(median = median(site_slope_dd)) %>% 
-  left_join(lms_combine)
+  left_join(lms_combine) %>% 
+  mutate(fit_pred = case_when(year == "2019" ~ "Prediction",
+                                  TRUE ~ "Fitted"))
 
 
 plot_all_slopes_with2019data <- sitedd.slopes %>%
   select(siteID, site_slope_dd, degree_days) %>%
   group_by(siteID) %>% 
+  left_join(lms_toplot %>% select(degree_days, year)) %>% 
   mutate(median = median(site_slope_dd),
          median = case_when(siteID %in% c("SYCA", "BLDE", "BLUE") ~ 0,  #place 2019-only sites at the bottom
                             TRUE ~ median),
          color = case_when(siteID %in% c("SYCA", "BLDE", "BLUE") ~ "same",
-                           TRUE ~ siteID)) %>% 
+                           TRUE ~ siteID),
+         fit_pred = case_when(year == "2019" ~ "Prediction",
+                              TRUE ~ "Fitted")) %>% 
   #filter(siteID == "ARIK" | siteID == "WLOU"| siteID == "LECO") %>%
   ggplot() +
   geom_density_ridges_gradient(aes(x = site_slope_dd, y = reorder(as.character(degree_days), degree_days), 
@@ -416,10 +421,11 @@ plot_all_slopes_with2019data <- sitedd.slopes %>%
                                rel_min_height = 0.01,
                                quantile_lines = TRUE, quantiles = 2,
                                alpha = 0.5) +
-  geom_point(data = lms_toplot, aes(x = slope, y = reorder(as.character(degree_days), degree_days),
-                                    shape = year,
-                                    size = year)) +
-  facet_grid(reorder(siteID, median) ~ ., scales = "free_y", switch = "y") +
+  geom_point(data = lms_toplot ,
+             aes(x = slope, y = reorder(as.character(degree_days), degree_days),
+                 shape = year,
+                 size = year)) +
+  facet_grid(reorder(siteID, median) ~ fit_pred, scales = "free_y", switch = "y") +
   xlim(c(-1.8, -0.9)) +
   scale_fill_viridis_d(alpha = 0.5) +
   # scale_color_manual(values = c("black", "black", "grey90")) +
@@ -443,10 +449,12 @@ plot_all_slopes_with2019data <- sitedd.slopes %>%
        subtitle = "") +
   NULL
 
+
 plot_all_slopes_with2019data
 
+
 ggsave(plot_all_slopes_with2019data,file = "plots/plot_all_slopeswith2019data.png",
-       width = 7, height = 12 )
+       width = 6, height = 10 )
 
 # fitted model ------------------------------------------------------------
 
