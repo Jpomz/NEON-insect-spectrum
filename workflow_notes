@@ -1,0 +1,31 @@
+analysis notes
+
+download data
+macros %>% filter out damaged individuals affecting measurement
+# how many have equations?
+
+Temperature %>% filter out >= 200 days of temperature measurements
+
+Model data N ~ M * DD + (1 + DD | SiteID) + (1 | year)
+Allow for random slopes by site, and random intercepts by site and year
+
+Assess model fit
+- plot priors vs posteriors
+- pp_check
+_ plot 95% fit interval and observed points
+- RMSE/MSPE
+- plot change in slope across sites?
+
+Predict 2019 model
+- RSME/MSPE
+- plot 95% prediction interval and observed points
+
+Predict 2017/2018 data with no temperature data
+- median temperature values from modeled data
+- use "re_formula" or similar to predict sites witout temperature variable?
+- or make a generic model without temperature and compare predictive ability?
+
+Predict other data set- McGarvey and Kirk
+- look up degree days for sampling event
+- plot prediction interval and observed sites
+- ~ same relationship && change in intercept --> justify investigating effects of productivity on community abundance (intercept)

@@ -94,28 +94,28 @@ print(mod)
 # re do this with posterior draws instead of rnorm. 
 data.frame(value = c(
   # Int_prior = 
-             rnorm(1000, 4.25, 2),
-           # Int_post = 
-             rnorm(1000, fixef(mod)[1,1], fixef(mod)[1,2]),
-           # M_prior = 
-             rnorm(1000, -2, 2),
-           # M_post =
-             rnorm(1000, fixef(mod)[2,1], fixef(mod)[2,2]),
-           # b_prior =
-             rnorm(1000, 0, 1),
-           # DD_post = 
-             rnorm(1000, fixef(mod)[3,1], fixef(mod)[3,2]),
-           # b_prior =
-           rnorm(1000, 0, 1),
-           # M_DD_post =
-             rnorm(1000, fixef(mod)[4,1], fixef(mod)[4,2])),
-           b_name = rep(c("Intercept", "Intercept", "M", "M",
-                        "Degree_days", "Degree_days", "M:DD", "M:DD"),
-                        each = 1000),
-           sample = rep(c("prior", "post",
-                          "prior", "post",
-                          "prior", "post",
-                          "prior", "post"), each = 1000)) %>%
+  rnorm(1000, 4.25, 2),
+  # Int_post = 
+  rnorm(1000, fixef(mod)[1,1], fixef(mod)[1,2]),
+  # M_prior = 
+  rnorm(1000, -2, 2),
+  # M_post =
+  rnorm(1000, fixef(mod)[2,1], fixef(mod)[2,2]),
+  # b_prior =
+  rnorm(1000, 0, 1),
+  # DD_post = 
+  rnorm(1000, fixef(mod)[3,1], fixef(mod)[3,2]),
+  # b_prior =
+  rnorm(1000, 0, 1),
+  # M_DD_post =
+  rnorm(1000, fixef(mod)[4,1], fixef(mod)[4,2])),
+  b_name = rep(c("Intercept", "Intercept", "M", "M",
+                 "Degree_days", "Degree_days", "M:DD", "M:DD"),
+               each = 1000),
+  sample = rep(c("prior", "post",
+                 "prior", "post",
+                 "prior", "post",
+                 "prior", "post"), each = 1000)) %>%
   ggplot() +
   geom_density(aes(x = value,
                    fill = sample),
@@ -295,6 +295,95 @@ site.slopes %>%
        subtitle = "") +
   NULL
 ggsave("ms/SI_fig7.png")
+
+
+# model intercepts --------------------------------------------------------
+
+mod.int <- as_tibble(
+  posterior_samples(
+    mod, pars = c("Intercept", "log10degree_days")))
+
+# pivot longer to get site_int and site_int_DD offsets
+site.int <- mod.int %>%
+  pivot_longer(7:25, names_to = "int_key", values_to = "site_int_offset") %>%
+  mutate(siteID = str_sub(int_key, 10, 13)) %>%
+  pivot_longer(16:34, names_to = "int_DD_key",
+               values_to = "site_int_DD_offset") %>%
+  left_join(site_dd) %>%
+  # not 100% certain that the below calculation is correct
+  mutate(site_int = b_Intercept + site_int_offset +
+           b_log10degree_days * log10(degree_days),
+         site_int_dd = b_Intercept + site_int_offset +
+           (site_int_DD_offset + b_log10degree_days) *
+           log10(degree_days)) %>%
+  group_by(siteID, degree_days) %>%
+  mutate(median.int = median(site_int)) %>%
+  ungroup()
+
+site.int %>%
+  group_by(siteID) %>%
+  summarize(l95 = quantile(site_int, probs = 0.025),
+            q50 = quantile(site_int, probs = 0.5),
+            u95 = quantile(site_int, probs = 0.975)) %>%
+  arrange(q50)
+
+site.int %>%
+  group_by(siteID, degree_days) %>%
+  summarize(l95 = quantile(site_int_dd, probs = 0.025),
+            q50 = quantile(site_int_dd, probs = 0.5),
+            u95 = quantile(site_int_dd, probs = 0.975)) %>%
+  arrange(siteID, degree_days)
+
+site.int %>%
+  ggplot(aes(y = fct_reorder(siteID, median.int),
+             x = site_int)) +
+  ggdist::stat_pointinterval() +
+  # geom_vline(xintercept = -1.33,
+  #            color = "red",
+  #            linetype = "longdash") +
+  # geom_vline(xintercept = -1.61, 
+  #            color = "red",
+  #            linetype = "dashed")+
+  # geom_vline(xintercept = -1.05, 
+  #            color = "red",
+  #            linetype = "dashed") +
+  theme_bw() +
+  labs(y = "Site",
+       x = "Intercept coefficient",
+       title = "Site-specific Intercept coefficient distribution")
+ggsave("ms/site-intercepts.png")
+
+# Plot showing effects of degree_days within a site
+site.int %>%
+  ggplot() +
+  geom_density_ridges_gradient(
+    aes(x = site_int_dd,
+        y = interaction(degree_days, siteID),
+        group = interaction(siteID, degree_days),
+        fill = siteID),
+    scale = 2,
+    rel_min_height = 0.01,
+    quantile_lines = TRUE, quantiles = 2,
+    alpha = 0.5) +
+  xlim(c(2.5, 6)) +
+  #scale_fill_viridis_d(alpha = 0.5) +
+  # geom_vline(aes(xintercept = -1.56),
+  #            color = "black",
+  #            linetype = "dashed",
+  #            size = 1) +
+  # geom_vline(aes(xintercept = -1.07),
+  #            color = "black",
+  #            linetype = "dashed",
+  #            size = 1) +
+  theme_bw() +
+  # facet_wrap(.~siteID,
+  #            scales = "free_y")+
+  labs(y = "Site",
+       x = "Intercept coefficient",
+       title = "Effect of degree days on Site-specific \nintercept coefficient distributions",
+       subtitle = "") +
+  NULL
+ggsave("ms/site-dd-intercepts.png")
 
 # fitted model ------------------------------------------------------------
 
