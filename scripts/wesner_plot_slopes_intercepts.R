@@ -15,12 +15,32 @@ library(cowplot)
 dat_all <- readRDS(file = "data/dat_all.rds")
 data_conditioned_on <- dat_all %>% filter(year != 2019)
 data_new <- dat_all %>% filter(year == 2019)
+dat <- dat_all %>% filter(year != 2019)
 
 # load model
 mod <- readRDS("data/dd_as_r_slope_6-30-20.RDS") # r slopes after talking with JSW 6/30
+mod_original <- mod
 
+# mod <- brm(data = dat,
+#     log_count_corrected ~
+#       log_mids_center * log10(degree_days) +
+#       (1+ log10(degree_days)*log_mids_center|siteID) + (1|year), 
+#     family = gaussian(),
+#     prior = c(prior(normal(-1, 1),
+#                     class = "b", coef = "log_mids_center"),
+#               prior(normal(0,1), class = "b"),
+#               prior(normal(4.5, 1.5), class = "Intercept"),
+#               prior(cauchy(0, 1), class = "sigma"),
+#               prior(cauchy(0,1), class = "sd")),
+#     chains = 4, 
+#     iter = 4000,
+#     cores = 4)
+# 
+# 
+# 
+# 
 
-# SLOPES ------------------------------------------------------------------
+# SLOPES and INTERCEPTS ------------------------------------------------------------------
 
 # site and degree day slopes
 sitedd_a <- posterior_samples(mod) %>% clean_names() %>% mutate(iter = 1:nrow(.)) %>% 
@@ -30,15 +50,17 @@ sitedd_a <- posterior_samples(mod) %>% clean_names() %>% mutate(iter = 1:nrow(.)
          ranef = paste0("r_",str_sub(ranef, 16))) %>% 
   pivot_wider(names_from = ranef, values_from = offset) %>%
   mutate(site = toupper(site)) %>% glimpse() %>% 
-  left_join(data_conditioned_on %>% select(siteID, degree_days) %>% rename(site = siteID) %>% distinct(site, degree_days)) %>%
+  left_join(data_conditioned_on %>% select(siteID, degree_days, year) %>% rename(site = siteID) %>% distinct(site, degree_days, year)) %>%
   mutate(Slope = b_log_mids_center + r_log_mids_center + (b_log_mids_center_log10degree_days + r_log10degree_days_log_mids_center)*log10(degree_days),
          Intercept = b_intercept + r_intercept + (b_log10degree_days + r_log10degree_days)*log10(degree_days)) %>%
-  mutate(group = paste0(site,round(degree_days,0)),
+  mutate(Intercept = case_when(year == "2017" ~ Intercept + r_year_2017_intercept, 
+                               TRUE ~ Intercept + r_year_2018_intercept),
+         group = paste0(site,round(degree_days,0)),
          prediction_level = "Sites in original model") %>% 
   glimpse()
 
 # posterior slopes for sites with data only in 2019
-sitedd_b <- sitedd_slopes_a %>% filter(site %in% c("WLOU", "WALK", "REDB")) %>% #just chose 3 existing sites as placeholders
+sitedd_b <- sitedd_a %>% filter(site %in% c("WLOU", "WALK", "REDB")) %>% #just chose 3 existing sites as placeholders
   mutate(site = case_when(site == "WLOU" ~ "SYCA",
                           site == "WALK" ~ "BLUE",
                           site == "REDB" ~ "BLDE"),
@@ -71,7 +93,7 @@ sitedd.all <- bind_rows(sitedd_a, sitedd_b) %>%
   ungroup() %>% 
   glimpse()
 
-sitedd.all %>% ungroup %>% distinct(Parameter)
+
 
 
 # Plot
@@ -133,16 +155,16 @@ plot_intercepts_wesner <- sitedd.all %>%
 
 
 
-#combine plots 
+# combine plots 
 p <- plot_grid(plot_slopes_wesner + theme(legend.position = "none"), 
                                     plot_intercepts_wesner+ theme(legend.position = "none"),
                align = "h", rel_widths = c(1, 0.8))
-#get legend
+# get legend
 legend <- get_legend(
   # create some space to the left of the legend
   plot_intercepts_wesner + theme(legend.box.margin = margin(0, 0, 0, 12)))
 
-#add legend
+# add legend
 plot_slopeandintercept <- plot_grid(p, legend,
                                     rel_widths = c(3, 0.7))
 
@@ -150,4 +172,11 @@ plot_slopeandintercept
 
 ggsave(plot_slopeandintercept , file = "plots/plot_slopeandintercept.png", dpi = 500, width = 6, height = 8)
 
+
+# summary stats
+sitedd.all %>% 
+  group_by(siteID, Parameter, degree_days) %>% 
+  median_qi(value) %>% 
+  pivot_wider(names_from = Parameter, values_from = c(value, .lower, .upper)) %>% 
+  arrange(value_Slope)
 
