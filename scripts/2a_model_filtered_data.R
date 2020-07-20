@@ -57,13 +57,19 @@ ggplot(dat,
              size = 2,
              pch = 21, 
              color = "black") +
-  facet_wrap(siteID~.) +
+  facet_wrap(siteID~.,
+             ncol = 3) +
   theme_bw() +
-  scale_fill_viridis_c(option = "plasma") +
+  scale_fill_viridis_c(option = "plasma",
+                       name = "Log10 \nDegree Days") +
   labs(y = "Log10 Normalized Abundance (N)",
        x = "Log10 M (mg, dry weight) centered",
-       title = "NEON Macroinvertebrate 2017-2018 M-N observations")
-ggsave("ms/fig1.png")
+       title = "NEON Macroinvertebrate 2017-2018 M-N observations"
+       ) 
+ggsave("ms/fig1.png",
+       width = 6.5,
+       height = 7,
+       units = "in")
 
 # Bayesian model ----------------------------------------------------------
 
@@ -143,31 +149,33 @@ plot(conditional_effects(mod), points = TRUE)
 # slope beta distributions ------------------------------------------------
 
 # plotting slopes across site:degree_days
-# mod.slopes <- as_tibble(
-#   posterior_samples(
-#     mod, pars = c("log_mids_center", "log10degree_days")))
-# site_dd <- dat %>%
-#   select(siteID, degree_days) %>% 
-#   unique()
+mod.slopes <- as_tibble(
+  posterior_samples(
+    mod, pars = c("log_mids_center", "log10degree_days")))
+site_dd <- dat %>%
+  select(siteID, degree_days) %>%
+  unique()
 # 
 # # pivot longer to get site_M and site_M_DD offsets
-# site.slopes <- mod.slopes %>%
-#   pivot_longer(10:28, names_to = "M_key", values_to = "site_M") %>%
-#   mutate(siteID = str_sub(M_key, 10, 13)) %>%
-#   pivot_longer(10:28, names_to = "M_DD_key", values_to = "site_M_DD") %>%
-#   left_join(site_dd) %>%
-#   # not 100% certain that the below calculation is correct
-#   mutate(site_slope = b_log_mids_center + site_M,
-#     site_slope_dd = b_log_mids_center + site_M +
-#            (`b_log_mids_center:log10degree_days` + site_M_DD) *
-#            log10(degree_days)) %>%
-#   group_by(siteID, degree_days) %>%
-#   mutate(median.slope = median(site_slope)) %>%
-#   ungroup()
+site.slopes <- mod.slopes %>%
+  pivot_longer(10:28, names_to = "M_key", values_to = "site_M") %>%
+  mutate(siteID = str_sub(M_key, 10, 13)) %>%
+  pivot_longer(10:28, names_to = "M_DD_key", values_to = "site_M_DD") %>%
+  left_join(site_dd) %>%
+  # not 100% certain that the below calculation is correct
+  mutate(site_slope = b_log_mids_center + site_M,
+    site_slope_dd = b_log_mids_center + site_M +
+           (`b_log_mids_center:log10degree_days` + site_M_DD) *
+           log10(degree_days)) %>%
+  group_by(siteID, degree_days) %>%
+  mutate(median.slope = median(site_slope)) %>%
+  ungroup()
 
 #### NEW CODE FROM WESNER - REPLACES the two code chunks above #####
 # SITE LEVEL PREDICTIONS
-site_slopes_a <- posterior_samples(mod) %>% clean_names() %>% mutate(iter = 1:nrow(.)) %>% 
+site_slopes_a <- posterior_samples(mod) %>%
+  clean_names() %>%
+  mutate(iter = 1:nrow(.)) %>% 
   select(!contains("cor_site")) %>% 
   pivot_longer(contains("r_site"), names_to = "ranef", values_to = "offset") %>%
   mutate(site = str_sub(ranef, 11,14),
@@ -194,27 +202,40 @@ mutate(group = site,
 
 # combine predictions
 site.slopes <- bind_rows(site_slopes_a, site_slopes_b) %>% 
-  mutate(order = case_when(prediction_level == "Sites not in original model" ~ -100,
+  mutate(order =
+           case_when(prediction_level ==
+                       "Sites not in original model" ~ -100,
                            TRUE ~ site_slope),
          siteID = site)
 
 
 #SITE X DEGREE DAY LEVEL PREDICTIONS
-sitedd_slopes_a <- posterior_samples(mod) %>% clean_names() %>% mutate(iter = 1:nrow(.)) %>% 
+sitedd_slopes_a <- posterior_samples(mod) %>%
+  clean_names() %>%
+  mutate(iter = 1:nrow(.)) %>% 
   select(!contains("cor_site")) %>% 
-  pivot_longer(contains("r_site"), names_to = "ranef", values_to = "offset") %>%
+  pivot_longer(contains("r_site"),
+               names_to = "ranef",
+               values_to = "offset") %>%
   mutate(site = str_sub(ranef, 11,14),
          ranef = paste0("r_",str_sub(ranef, 16))) %>% 
   pivot_wider(names_from = ranef, values_from = offset) %>%
   mutate(site = toupper(site)) %>% 
-  left_join(lms_combine) %>% glimpse() %>% 
-  mutate(site_slope_dd20172018 = b_log_mids_center + r_log_mids_center + (b_log_mids_center_log10degree_days + r_log10degree_days_log_mids_center)*log10(degree_days)) %>%
+  # left_join(lms_combine) %>%
+  # glimpse() %>% 
+  mutate(site_slope_dd20172018 =
+           b_log_mids_center + r_log_mids_center +
+           (b_log_mids_center_log10degree_days +
+              r_log10degree_days_log_mids_center)*
+           log10(degree_days)) %>%
   mutate(group = paste0(site,round(degree_days,0)),
          prediction_level = "Sites in original model") %>% 
   glimpse()
 
 # posterior slopes for sites with data only in 2019
-sitedd_slopes_b <- site_slopes_a %>% filter(site %in% c("WLOU", "WALK", "REDB")) %>% #just chose 3 existing sites as placeholders
+sitedd_slopes_b <- site_slopes_a %>%
+  filter(site %in% c("WLOU", "WALK", "REDB")) %>%
+  #just chose 3 existing sites as placeholders
   mutate(site = case_when(site == "WLOU" ~ "SYCA",
                           site == "WALK" ~ "BLUE",
                           site == "REDB" ~ "BLDE"),
@@ -228,8 +249,10 @@ sitedd_slopes_b <- site_slopes_a %>% filter(site %in% c("WLOU", "WALK", "REDB"))
 
 # combine predictions
 site.slopes <- bind_rows(site_slopes_a, site_slopes_b) %>% 
-  mutate(order = case_when(prediction_level == "Sites not in original model" ~ -100,
-                           TRUE ~ site_slope),
+  mutate(order =
+           case_when(prediction_level ==
+                       "Sites not in original model" ~ -100,
+                     TRUE ~ site_slope),
          siteID = site)
 
 sitedd.slopes <- bind_rows(sitedd_slopes_a, sitedd_slopes_b) %>% 
@@ -249,6 +272,15 @@ site.slopes %>%
             u95 = quantile(site_slope, probs = 0.975)) %>%
   arrange(q50)
 
+# range of site-specific slopes, ignoring DD
+site.slopes %>%
+  group_by(siteID) %>%
+  summarize(l95 = quantile(site_slope, probs = 0.025),
+            q50 = quantile(site_slope, probs = 0.5),
+            u95 = quantile(site_slope, probs = 0.975)) %>%
+  pull(q50) %>%
+  range()
+
 site.slopes %>%
   group_by(siteID) %>%
   summarize(l95 = quantile(site_slope, probs = 0.025),
@@ -257,6 +289,14 @@ site.slopes %>%
   mutate(delta = u95 - l95) %>%
   ungroup() %>% 
   arrange(delta)
+
+site.slopes %>%
+  group_by(siteID, degree_days) %>%
+  summarize(l95 = quantile(site_slope_dd, probs = 0.025),
+            q50 = quantile(site_slope_dd, probs = 0.5),
+            u95 = quantile(site_slope_dd, probs = 0.975)) %>%
+  pull(q50) %>%
+  range()
 
 # difference in median slope parameters #####NOT SURE WHAT THIS IS? - WESNER ####
 site.slopes %>%
@@ -267,22 +307,23 @@ site.slopes %>%
   
 
 # 95% CrI for site-specific slopes, with degree days
-sitedd.slopes %>%
-  group_by(siteID, degree_days) %>%
-  summarize(l95 = quantile(site_slope_dd, probs = 0.025),
-            q50 = quantile(site_slope_dd, probs = 0.5),
-            u95 = quantile(site_slope_dd, probs = 0.975)) %>%
-  write.csv("ms/SI_site_dd_slopes.csv", row.names = FALSE)
-
-# range of seasonal variation
-sitedd.slopes %>%
-  group_by(siteID, degree_days) %>%
-  summarize(l95 = quantile(site_slope_dd, probs = 0.025),
-            q50 = quantile(site_slope_dd, probs = 0.5),
-            u95 = quantile(site_slope_dd, probs = 0.975)) %>%
-  ungroup() %>%
-  mutate(delta = u95 - l95) %>%
-  arrange(delta)
+# sitedd.slopes object above is not correct
+# sitedd.slopes %>%
+#   group_by(siteID, degree_days) %>%
+#   summarize(l95 = quantile(site_slope_dd, probs = 0.025),
+#             q50 = quantile(site_slope_dd, probs = 0.5),
+#             u95 = quantile(site_slope_dd, probs = 0.975)) %>%
+#   write.csv("ms/SI_site_dd_slopes.csv", row.names = FALSE)
+# 
+# # range of seasonal variation
+# sitedd.slopes %>%
+#   group_by(siteID, degree_days) %>%
+#   summarize(l95 = quantile(site_slope_dd, probs = 0.025),
+#             q50 = quantile(site_slope_dd, probs = 0.5),
+#             u95 = quantile(site_slope_dd, probs = 0.975)) %>%
+#   ungroup() %>%
+#   mutate(delta = u95 - l95) %>%
+#   arrange(delta)
 
 # difference in seasonal median slope parameters within a site
 site.slopes %>%
@@ -374,7 +415,8 @@ ggsave("ms/SI_fig6.png")
 
 # WESNER ADD 2019 DATA POSTERIOR PLOTS
 # compute least squares regressions for each site/year/degree_day combo
-dat_formod <- dat_all %>% mutate(group = paste0(siteID,round(degree_days,0), "_",year))
+dat_formod <- dat_all %>%
+  mutate(group = paste0(siteID,round(degree_days,0), "_",year))
 
 lms <- lmList(log_count_corrected ~ log_mids_center | group, data = dat_formod)
 
@@ -389,7 +431,8 @@ lms_coefs <- coef(lms) %>% rownames_to_column() %>% clean_names() %>%
   glimpse()
 
 #select columns
-lms_combine <- lms_coefs %>% select(site, year, degree_days, slope) %>% 
+lms_combine <- lms_coefs %>%
+  select(site, year, degree_days, slope) %>% 
   mutate(siteID = site)
 
 # add posterior medians for plotting order
@@ -480,6 +523,7 @@ site.int <- mod.int %>%
   mutate(median.int = median(site_int)) %>%
   ungroup()
 
+#site specific intercepts, averaged over degree days
 site.int %>%
   group_by(siteID) %>%
   summarize(l95 = quantile(site_int, probs = 0.025),
@@ -487,12 +531,13 @@ site.int %>%
             u95 = quantile(site_int, probs = 0.975)) %>%
   arrange(q50)
 
+#site specific intercepts including effects of degree days
 site.int %>%
   group_by(siteID, degree_days) %>%
   summarize(l95 = quantile(site_int_dd, probs = 0.025),
             q50 = quantile(site_int_dd, probs = 0.5),
             u95 = quantile(site_int_dd, probs = 0.975)) %>%
-  arrange(siteID, degree_days)
+  arrange(q50)
 
 site.int %>%
   ggplot(aes(y = fct_reorder(siteID, median.int),
@@ -545,6 +590,23 @@ site.int %>%
   NULL
 ggsave("ms/site-dd-intercepts.png")
 
+# intercepts across latitudes?
+site.info <- readr::read_csv("data/aquatic-field-sites.csv")
+site.int %>%
+  group_by(siteID) %>%
+  summarize(q50 = quantile(site_int, probs = 0.5)) %>%
+  left_join(site.info[, c("Site ID", "Latitude")], by = c("siteID" = "Site ID")) %>%
+  ggplot(aes(x = Latitude, y = q50)) +
+  geom_point() +
+  stat_smooth(method = "lm")
+
+site.int %>%
+  group_by(siteID) %>%
+  summarize(q50 = quantile(site_int, probs = 0.5)) %>%
+  left_join(site.info[, c("Site ID", "mat.c")], by = c("siteID" = "Site ID")) %>%
+  ggplot(aes(x = mat.c, y = q50)) +
+  geom_point() +
+  stat_smooth(method = "lm")
 # fitted model ------------------------------------------------------------
 
 
