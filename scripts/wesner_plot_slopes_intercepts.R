@@ -47,7 +47,7 @@ sitedd_a <- posterior_samples(mod) %>% clean_names() %>% mutate(iter = 1:nrow(.)
   select(!contains("cor_site")) %>% 
   pivot_longer(contains("r_site"), names_to = "ranef", values_to = "offset") %>%
   mutate(site = str_sub(ranef, 11,14),
-         ranef = paste0("r_",str_sub(ranef, 16))) %>% 
+         ranef = paste0("r_",str_sub(ranef, 16))) %>%
   pivot_wider(names_from = ranef, values_from = offset) %>%
   mutate(site = toupper(site)) %>% glimpse() %>% 
   left_join(data_conditioned_on %>% select(siteID, degree_days, year) %>% rename(site = siteID) %>% distinct(site, degree_days, year)) %>%
