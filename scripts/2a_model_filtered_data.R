@@ -39,6 +39,9 @@ dat_all <- dat
 dat <- dat %>%
   filter(year != 2019)
 
+dat.2019 <- dat %>%
+  filter(year == 2019)
+
 # number of populated bins per sample?
 dat %>%
   group_by(siteID, collectDate) %>%
@@ -60,8 +63,7 @@ ggplot(dat,
   facet_wrap(siteID~.,
              ncol = 3) +
   theme_bw() +
-  scale_fill_viridis_c(option = "plasma",
-                       name = "Log10 \nDegree Days") +
+  scale_fill_viridis_c(option = "plasma") +
   labs(y = "Log10 Normalized Abundance (N)",
        x = "Log10 M (mg, dry weight) centered",
        title = "NEON Macroinvertebrate 2017-2018 M-N observations"

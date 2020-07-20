@@ -100,15 +100,19 @@ sitedd.all <- bind_rows(sitedd_a, sitedd_b) %>%
 plot_slopes_wesner <- sitedd.all %>% 
   filter(Parameter == "Slope") %>% 
   ggplot() +
-  geom_density_ridges_gradient(aes(x = value, y = reorder(siteID, -median), 
-                                   fill = degree_days, group = interaction(degree_days, siteID)),
-                               scale = 2,
-                               rel_min_height = 0.01,
-                               quantile_lines = TRUE, quantiles = 2,
-                               alpha = 0.5) +
+  geom_density_ridges_gradient(
+    aes(x = value,
+        y = reorder(siteID, -median),
+        fill = degree_days,
+        group = interaction(degree_days, siteID)),
+    scale = 2,
+    rel_min_height = 0.01,
+    quantile_lines = TRUE,
+    quantiles = 2,
+    alpha = 0.5) +
   # facet_wrap(~Parameter, scales = "free_x") +
   xlim(c(-1.8, -0.9)) +
-  scale_fill_viridis(alpha = 0.5) +
+  scale_fill_viridis(alpha = 0.5, option = "plasma") +
   # geom_vline(aes(xintercept = -1.56),
   #            color = "black",
   #            linetype = "dashed",
@@ -121,21 +125,25 @@ plot_slopes_wesner <- sitedd.all %>%
   # guides(fill = F) +
   labs(y = "Site",
        x = "Slope",
-       subtitle = "") +
-  NULL
+       subtitle = "")
 
 plot_intercepts_wesner <- sitedd.all %>% 
   filter(Parameter != "Slope") %>% 
   ggplot() +
-  geom_density_ridges_gradient(aes(x = value, y = reorder(siteID, -median), 
-                                   fill = degree_days, group = interaction(degree_days, siteID)),
-                               scale = 2,
-                               rel_min_height = 0.01,
-                               quantile_lines = TRUE, quantiles = 2,
-                               alpha = 0.5) +
+  geom_density_ridges_gradient(
+    aes(x = value,
+        y = reorder(siteID, -median),
+        fill = degree_days,
+        group = interaction(degree_days, siteID)),
+    scale = 2,
+    rel_min_height = 0.01,
+    quantile_lines = TRUE,
+    quantiles = 2,
+    alpha = 0.5) +
   # facet_wrap(~Parameter, scales = "free_x") +
   xlim(c(2.5, 6)) +
-  scale_fill_viridis(alpha = 0.5) +
+  scale_fill_viridis(alpha = 0.5,
+                     option = "plasma") +
   # geom_vline(aes(xintercept = -1.56),
   #            color = "black",
   #            linetype = "dashed",
@@ -156,9 +164,11 @@ plot_intercepts_wesner <- sitedd.all %>%
 
 
 # combine plots 
-p <- plot_grid(plot_slopes_wesner + theme(legend.position = "none"), 
-                                    plot_intercepts_wesner+ theme(legend.position = "none"),
-               align = "h", rel_widths = c(1, 0.8))
+p <- plot_grid(plot_slopes_wesner +
+                 theme(legend.position = "none"),
+               plot_intercepts_wesner+ theme(legend.position = "none"),
+               align = "h",
+               rel_widths = c(1, 0.8))
 # get legend
 legend <- get_legend(
   # create some space to the left of the legend
@@ -170,7 +180,12 @@ plot_slopeandintercept <- plot_grid(p, legend,
 
 plot_slopeandintercept 
 
-ggsave(plot_slopeandintercept , file = "plots/plot_slopeandintercept.png", dpi = 500, width = 6, height = 8)
+ggsave(plot_slopeandintercept,
+       file = "ms/plot_slopeandintercept.png",
+       dpi = 500,
+       width = 6,
+       height = 8,
+       units = "in")
 
 
 # summary stats

@@ -91,10 +91,14 @@ ggplot(no.t.forecast,
              size = 1.7,
              alpha = 0.6,
              inherit.aes = FALSE) +
-  facet_wrap(siteID~.) +
+  facet_wrap(siteID~.,
+             ncol = 3) +
   scale_color_viridis_d(option = "plasma") +
   NULL
-ggsave("ms/fig3.png")
+ggsave("ms/fig3.png",
+       width = 6.5,
+       height = 7,
+       units = "in")
 
 # poorest prediction was at TECR, plot here for SI
 no.t.forecast %>% 
