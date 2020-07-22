@@ -19,7 +19,6 @@ dat <- dat_all %>% filter(year != 2019)
 
 # load model
 mod <- readRDS("data/dd_as_r_slope_6-30-20.RDS") # r slopes after talking with JSW 6/30
-mod_original <- mod
 
 # mod <- brm(data = dat,
 #     log_count_corrected ~
@@ -51,8 +50,12 @@ sitedd_a <- posterior_samples(mod) %>% clean_names() %>% mutate(iter = 1:nrow(.)
   pivot_wider(names_from = ranef, values_from = offset) %>%
   mutate(site = toupper(site)) %>% glimpse() %>% 
   left_join(data_conditioned_on %>% select(siteID, degree_days, year) %>% rename(site = siteID) %>% distinct(site, degree_days, year)) %>%
-  mutate(Slope = b_log_mids_center + r_log_mids_center + (b_log_mids_center_log10degree_days + r_log10degree_days_log_mids_center)*log10(degree_days),
-         Intercept = b_intercept + r_intercept + (b_log10degree_days + r_log10degree_days)*log10(degree_days)) %>%
+  mutate(Slope = b_log_mids_center + r_log_mids_center + (b_log_mids_center_log10degree_days + 
+                                                            r_log10degree_days_log_mids_center)*log10(degree_days),
+         Intercept = b_intercept + r_intercept + 
+           (b_log_mids_center + r_log_mids_center)*mean(dat$log_mids_center) +
+           (b_log10degree_days + r_log10degree_days)*log10(degree_days) + 
+           (b_log_mids_center_log10degree_days + r_log10degree_days_log_mids_center)*log10(degree_days)*mean(dat$log_mids_center)) %>%
   mutate(Intercept = case_when(year == "2017" ~ Intercept + r_year_2017_intercept, 
                                TRUE ~ Intercept + r_year_2018_intercept),
          group = paste0(site,round(degree_days,0)),
@@ -69,7 +72,9 @@ sitedd_b <- sitedd_a %>% filter(site %in% c("WLOU", "WALK", "REDB")) %>% #just c
   mutate(Slope= b_log_mids_center + rnorm(nrow(.), 0, sd_site_id_log_mids_center) +
            (b_log_mids_center_log10degree_days + rnorm(nrow(.), 0, sd_site_id_log10degree_days_log_mids_center))*log10(degree_days),
          Intercept = b_intercept + rnorm(nrow(.), 0, sd_site_id_intercept) + rnorm(nrow(.), 0, sd_year_intercept) +
-           (b_log10degree_days + rnorm(nrow(.), 0, sd_site_id_log10degree_days))*log10(degree_days)) %>%
+           (b_log10degree_days + rnorm(nrow(.), 0, sd_site_id_log10degree_days))*log10(degree_days) + 
+           (b_log_mids_center + rnorm(nrow(.), 0, sd_site_id_log_mids_center))*mean(dat$log_mids_center) + 
+           (b_log_mids_center_log10degree_days + rnorm(nrow(.), 0, sd_site_id_log10degree_days_log_mids_center))*mean(dat$log_mids_center)*log10(degree_days)) %>%
   mutate(group = paste0(site,round(degree_days,0)),
          prediction_level = "Sites not in original model") %>% 
   glimpse()
@@ -93,8 +98,7 @@ sitedd.all <- bind_rows(sitedd_a, sitedd_b) %>%
   ungroup() %>% 
   glimpse()
 
-
-
+saveRDS(sitedd.all, file = "data/sitedd.all.rds")
 
 # Plot
 plot_slopes_wesner <- sitedd.all %>% 
@@ -149,16 +153,17 @@ plot_intercepts_wesner <- sitedd.all %>%
   theme(axis.text.y = element_blank(),
         axis.title.y = element_blank()) +
   labs(y = "Site",
-       x = "Intercept",
+       x = "Intercept (Community Height, log10N')",
        subtitle = "") +
   NULL
 
 
-
 # combine plots 
-p <- plot_grid(plot_slopes_wesner + theme(legend.position = "none"), 
-                                    plot_intercepts_wesner+ theme(legend.position = "none"),
-               align = "h", rel_widths = c(1, 0.8))
+p <- plot_grid(plot_slopes_wesner+ theme(legend.position = "none") ,
+                                             plot_intercepts_wesner + theme(legend.position = "none"),
+               align = "h", rel_widths = c(1, 0.8),
+               labels = "auto", hjust = c(-5.9, -0.5))
+
 # get legend
 legend <- get_legend(
   # create some space to the left of the legend
@@ -178,5 +183,90 @@ sitedd.all %>%
   group_by(siteID, Parameter, degree_days) %>% 
   median_qi(value) %>% 
   pivot_wider(names_from = Parameter, values_from = c(value, .lower, .upper)) %>% 
-  arrange(value_Slope)
+  arrange(value_Slope) 
+
+
+
+# Plot degree days on x and slope and comm height on y --------------------
+
+# extract fitted values of log_count_corrected along the range of degree days - assumes log_mids_center is at it's mean
+c_eff_int <- conditional_effects(mod, effects = c("degree_days"), re_formula = NA, method = "fitted")
+
+# convert c_eff to list
+c_eff_list <- plot(c_eff, plot = FALSE)
+
+# convert c_eff_list to tibble for plotting
+c_eff_toplot <- c_eff_list$degree_days$data %>% bind_rows() %>% clean_names() %>% 
+  select(degree_days, estimate, lower, upper) %>% 
+  mutate(Parameter = "Community Height")
+
+
+
+# do same as above, but for slopes
+min_dd <- min(dat$degree_days)
+max_dd <- max(dat$degree_days)
+
+c_eff_slopes <- posterior_samples(mod) %>% as_tibble() %>% clean_names() %>% mutate(iter = 1:nrow(.)) %>% 
+  expand_grid(degree_days = seq(min_dd, max_dd, length.out = 100)) %>% 
+  mutate(Slope = b_log_mids_center + b_log_mids_center_log10degree_days*log10(degree_days)) %>% 
+  select(degree_days, Slope, iter) %>% glimpse() %>% 
+  group_by(degree_days) %>% 
+  median_qi(Slope) %>% 
+  rename(estimate = Slope, lower = .lower, upper = .upper) %>% 
+  mutate(Parameter = "Slope")
+
+#combine 
+slope_int = c_eff_toplot %>% bind_rows(c_eff_slopes) %>% glimpse()
+
+# extract mean and CrI for each site*dd combo
+sitedd_posts <- sitedd.all %>% 
+  # filter(prediction_level == "Sites in original model") %>% 
+  group_by(siteID, Parameter, degree_days, prediction_level) %>% 
+  median_qi(value) %>% 
+  pivot_wider(names_from = Parameter, values_from = c(value, .lower, .upper)) %>% 
+  arrange(value_Slope) 
+
+# plot slope versus degree_days
+plot_slope_dd <- slope_int %>% filter(Parameter == "Slope") %>% clean_names() %>%
+  ggplot() + 
+  geom_line(aes(x = degree_days, y = estimate)) + 
+  # geom_label(data = sitedd_posts, aes(x = degree_days, y = value_Intercept, label = siteID)) +
+  geom_pointrange(data = sitedd_posts %>% filter(prediction_level == "Sites in original model"),
+               aes(x = degree_days, y = value_Slope, ymin = .lower_Slope, ymax = .upper_Slope,
+                   group = degree_days), size = 0.2) +
+  geom_ribbon(alpha = 0.2, aes(x = degree_days, ymin = lower, ymax = upper)) +
+  scale_x_log10() +
+  theme_bw() +
+  theme_bw() +
+  theme(plot.margin = margin(0, 30, 0, 0)) +
+  ylim(-1.75, -0.75) +
+  labs(y = "Slope",
+       x = "Degree Days") +
+  # coord_cartesian(ylim = c(3, 5.5)) +
+  NULL
+
+# plot change of community height as a function of degree_days
+plot_int_dd <- slope_int %>% filter(Parameter == "Community Height") %>% clean_names() %>%
+  ggplot() + 
+  geom_line(aes(x = degree_days, y = estimate)) + 
+  # geom_label(data = sitedd_posts, aes(x = degree_days, y = value_Intercept, label = siteID)) +
+  geom_pointrange(data = sitedd_posts %>% filter(prediction_level == "Sites in original model"),
+                  aes(x = degree_days, y = value_Intercept, ymin = .lower_Intercept, ymax = .upper_Intercept,
+                      group = degree_days), size = 0.2) +
+  geom_ribbon(alpha = 0.2, aes(x = degree_days, ymin = lower, ymax = upper)) +
+  scale_x_log10() +
+  theme_bw() +
+  theme(plot.margin = margin(0, 30, 0, 0)) +
+  ylim(2.5, 5.5) +
+  labs(y = "Intercept (Community Height)\nlog10N'",
+       x = "Degree Days") +
+  # coord_cartesian(ylim = c(3, 5.5)) +
+  NULL
+
+
+plot_slopeint_dd <- plot_grid(plot_slope_dd, plot_int_dd, labels = "auto", hjust = c(-5.7, -5.))
+
+plot_slopeint_dd
+ggsave(plot_slopeint_dd, file = "plots/plot_slope_dd.png", dpi = 600, 
+       width = 7, height = 2.5)
 

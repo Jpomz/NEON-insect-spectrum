@@ -104,16 +104,20 @@ dat_arik <- dat %>% filter(siteID == "ARIK")
 # Model with no pooling (separate regressions at each site)
 dat_lists <- split(dat, f = dat$siteID)
 
-mod_nopool <- brm_multiple(log_count_corrected ~ log_mids_center*log10(degree_days),
-                  family = gaussian(),
-                  data = dat_lists,
-                  prior = c(prior(normal(-1, 1),
-                                  class = "b", coef = "log_mids_center"),
-                            prior(normal(0,1), class = "b"),
-                            # prior(normal(4.5, 1.5), class = "Intercept"),
-                            prior(cauchy(0,1), class = "sigma")),
-                  chains = 2,
-                  iter = 2000)
+# mod_nopool <- brm_multiple(log_count_corrected ~ log_mids_center*log10(degree_days),
+#                   family = gaussian(),
+#                   data = dat_lists,
+#                   prior = c(prior(normal(-1, 1),
+#                                   class = "b", coef = "log_mids_center"),
+#                             prior(normal(0,1), class = "b"),
+#                             # prior(normal(4.5, 1.5), class = "Intercept"),
+#                             prior(cauchy(0,1), class = "sigma")),
+#                   chains = 2,
+#                   iter = 2000)
+# 
+# saveRDS(mod_nopool, file = "data/mod_nopool.rds")
+mod_nopool <- readRDS(file = "data/mod_nopool.rds")
+
 # 
 # mod_arik <- brm(log_count_corrected ~ log_mids_center*log10(degree_days)*siteID,
 #     family = gaussian(),
@@ -136,37 +140,37 @@ post_het <- posterior_samples(mod_nopool, summary = F) %>% as_tibble() %>% clean
   mutate(value = b_log_mids_center + b_log_mids_center_log10degree_days*log10(degree_days)) %>% 
   mutate(prediction_level = "Sites in original model",
          Parameter = "Slope",
-         method = "Heterogenous") %>% 
+         method = "No pooling") %>% 
   glimpse()
 
 
-sitedd.all %>% mutate(method = "Hierarchical") %>% 
-  bind_rows(post_het) %>% 
-  filter(Parameter == "Slope") %>% 
-  ggplot() +
-  geom_density_ridges_gradient(aes(x = value, y = reorder(siteID, -median), 
-                                   fill = degree_days, group = interaction(degree_days, siteID)),
-                               scale = 2,
-                               rel_min_height = 0.01,
-                               quantile_lines = TRUE, quantiles = 2,
-                               alpha = 0.5) +
-  facet_wrap(~method, scales = "free_x") +
-  xlim(c(-1.8, -0.9)) +
-  scale_fill_viridis(alpha = 0.5) +
-  # geom_vline(aes(xintercept = -1.56),
-  #            color = "black",
-  #            linetype = "dashed",
-  #            size = 1) +
-  # geom_vline(aes(xintercept = -1.07),
-  #            color = "black",
-  #            linetype = "dashed",
-  #            size = 1) +
-  theme_bw() +
-  # guides(fill = F) +
-  labs(y = "Site",
-       x = "Slope",
-       subtitle = "") +
-  NULL
+# sitedd.all %>% mutate(method = "Hierarchical") %>% 
+#   bind_rows(post_het) %>% 
+#   filter(Parameter == "Slope") %>% 
+#   ggplot() +
+#   geom_density_ridges_gradient(aes(x = value, y = reorder(siteID, -median), 
+#                                    fill = degree_days, group = interaction(degree_days, siteID)),
+#                                scale = 2,
+#                                rel_min_height = 0.01,
+#                                quantile_lines = TRUE, quantiles = 2,
+#                                alpha = 0.5) +
+#   facet_wrap(~method, scales = "free_x") +
+#   xlim(c(-1.8, -0.9)) +
+#   scale_fill_viridis(alpha = 0.5) +
+#   # geom_vline(aes(xintercept = -1.56),
+#   #            color = "black",
+#   #            linetype = "dashed",
+#   #            size = 1) +
+#   # geom_vline(aes(xintercept = -1.07),
+#   #            color = "black",
+#   #            linetype = "dashed",
+#   #            size = 1) +
+#   theme_bw() +
+#   # guides(fill = F) +
+#   labs(y = "Site",
+#        x = "Slope",
+#        subtitle = "") +
+#   NULL
 
 
 
