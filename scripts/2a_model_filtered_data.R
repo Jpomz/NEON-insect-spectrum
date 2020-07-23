@@ -39,7 +39,7 @@ dat_all <- dat
 dat <- dat %>%
   filter(year != 2019)
 
-dat.2019 <- dat %>%
+dat.2019 <- dat_all %>%
   filter(year == 2019)
 
 # number of populated bins per sample?
@@ -68,10 +68,7 @@ ggplot(dat,
        x = "Log10 M (mg, dry weight) centered",
        title = "NEON Macroinvertebrate 2017-2018 M-N observations"
        ) 
-ggsave("ms/fig1.png",
-       width = 6.5,
-       height = 7,
-       units = "in")
+
 
 # Bayesian model ----------------------------------------------------------
 
@@ -346,6 +343,7 @@ site.slopes %>%
 
 #median site slope across latitudes?
 site.info <- readr::read_csv("data/aquatic-field-sites.csv")
+
 site.slopes %>%
   group_by(siteID) %>%
   summarize(q50 = quantile(site_slope, probs = 0.5)) %>%
@@ -356,10 +354,26 @@ site.slopes %>%
 site.slopes %>%
   group_by(siteID) %>%
   summarize(q50 = quantile(site_slope, probs = 0.5)) %>%
+  left_join(site.info[, c("Site ID", "Latitude")], by = c("siteID" = "Site ID")) %>%
+  select(q50, Latitude) %>%
+  cor()
+
+  
+# median slope across mean annual temperature?
+site.slopes %>%
+  group_by(siteID) %>%
+  summarize(q50 = quantile(site_slope, probs = 0.5)) %>%
   left_join(site.info[, c("Site ID", "mat.c")], by = c("siteID" = "Site ID")) %>%
   ggplot(aes(x = mat.c, y = q50)) +
   geom_point() +
   stat_smooth(method = "lm")
+
+site.slopes %>%
+  group_by(siteID) %>%
+  summarize(q50 = quantile(site_slope, probs = 0.5)) %>%
+  left_join(site.info[, c("Site ID", "mat.c")], by = c("siteID" = "Site ID")) %>%
+  select(q50, mat.c) %>%
+  cor()
 
 # plots for slope distributions across sites ####
 # still a work in progress
@@ -510,7 +524,8 @@ mod.int <- as_tibble(
 
 # pivot longer to get site_int and site_int_DD offsets
 site.int <- mod.int %>%
-  pivot_longer(7:25, names_to = "int_key", values_to = "site_int_offset") %>%
+  pivot_longer(7:25, names_to = "int_key",
+               values_to = "site_int_offset") %>%
   mutate(siteID = str_sub(int_key, 10, 13)) %>%
   pivot_longer(16:34, names_to = "int_DD_key",
                values_to = "site_int_DD_offset") %>%
@@ -605,10 +620,25 @@ site.int %>%
 site.int %>%
   group_by(siteID) %>%
   summarize(q50 = quantile(site_int, probs = 0.5)) %>%
+  left_join(site.info[, c("Site ID", "Latitude")], by = c("siteID" = "Site ID")) %>%
+  select(q50, Latitude) %>%
+  cor()
+
+# mean annual temperature?
+site.int %>%
+  group_by(siteID) %>%
+  summarize(q50 = quantile(site_int, probs = 0.5)) %>%
   left_join(site.info[, c("Site ID", "mat.c")], by = c("siteID" = "Site ID")) %>%
   ggplot(aes(x = mat.c, y = q50)) +
   geom_point() +
   stat_smooth(method = "lm")
+
+site.int %>%
+  group_by(siteID) %>%
+  summarize(q50 = quantile(site_int, probs = 0.5)) %>%
+  left_join(site.info[, c("Site ID", "mat.c")], by = c("siteID" = "Site ID")) %>%
+  select(q50, mat.c) %>%
+  cor()
 # fitted model ------------------------------------------------------------
 
 
@@ -707,25 +737,30 @@ ggplot(mod.fit,
            ymax = Q97.5,
            x = log_mids_center,
            group = interaction(siteID, degree_days),
-           fill = log10(degree_days))) +
+           fill = degree_days)) +
   theme_bw() +
-  geom_ribbon(alpha = 0.6) +
+  geom_ribbon(alpha = 0.4) +
   geom_point(aes(y = log_count_corrected,
                  x = log_mids_center, 
-                 fill = log10(degree_days)),
-             pch = 21, 
-             color = "black",
-             size = 2,
+                 color = degree_days),
+             # pch = 21, 
+             # color = "black",
+             size = 0.9,
              inherit.aes = FALSE,
              alpha = 0.4) +
-  facet_wrap(.~siteID) +
+  facet_wrap(.~siteID,
+             ncol = 3) +
   scale_fill_viridis(option = "plasma") +
   scale_color_viridis(option = "plasma") +
   labs(y = "Log10 Normalized Abundance (N)",
-       x = "Log10 M (mg, dry weight) centered",
-       title = "2017-2018 NEON Macroinvertebrate M-N observations",
-       subtitle = "95% fitted interval")
-ggsave("ms/SI_fig3.png")
+       x = "Log10 M (mg, dry weight) centered"#,
+       # title = "2017-2018 NEON Macroinvertebrate M-N observations",
+       # subtitle = "95% fitted interval"
+       )
+ggsave("ms/fitted_fig.png",
+       width = 6.5,
+       height = 7,
+       units = "in")
 
 
 # Predict 2019 data -------------------------------------------------------
@@ -777,27 +812,29 @@ ggplot(pred.2019,
            ymax = Q97.5,
            x = log_mids_center,
            group = interaction(siteID, degree_days),
-           fill = log10(degree_days))) +
-  geom_line(aes(y = Estimate, x = log_mids_center),
-            color = "black") +
+           fill = degree_days)) +
+  # geom_line(aes(y = Estimate, x = log_mids_center),
+  #           color = "black") +
   theme_bw() +
-  geom_ribbon(alpha = 0.6) +
+  geom_ribbon(alpha = 0.3) +
   geom_point(aes(y = log_count_corrected,
                  x = log_mids_center, 
-                 fill = log10(degree_days)),
-             pch = 21, 
-             color = "black",
-             size = 2,
+                 color = degree_days),
+             size = .9,
              inherit.aes = FALSE,
              alpha = 1) +
-  facet_wrap(.~facetID) +
+  facet_wrap(.~siteID,
+             ncol = 3) +
   scale_fill_viridis(option = "plasma") +
   scale_color_viridis(option = "plasma") +
   labs(y = "Log10 Normalized Abundance (N)",
        x = "Log10 M (mg, dry weight) centered",
        title = "NEON Macroinvertebrate M-N 2019 observations",
        subtitle = "95% Prediction interval")
-ggsave("ms/SI_fig4.png")
+ggsave("ms/predict_2019_old.png",
+       width = 6.5,
+       height = 7,
+       units = "in")
 
 # predict for new sites in 2019
 new.site.2019 <- dat.2019 %>%
@@ -838,15 +875,15 @@ ggplot(new.pred.2019,
            ymax = Q97.5,
            x = log_mids_center,
            group = interaction(siteID, degree_days),
-           fill = log10(degree_days))) +
+           fill = degree_days)) +
   geom_line(aes(y = Estimate, x = log_mids_center),
             color = "black") +
   theme_bw() +
-  geom_ribbon(alpha = 0.6) +
+  geom_ribbon(alpha = 0.4) +
   geom_point(aes(y = log_count_corrected,
                  x = log_mids_center, 
-                 fill = log10(degree_days)),
-             pch = 21, 
+                 fill = degree_days),
+             shape = 21, 
              color = "black",
              size = 2,
              inherit.aes = FALSE,
@@ -858,7 +895,11 @@ ggplot(new.pred.2019,
        x = "Log10 M (mg, dry weight) centered",
        title = "M-N 2019 new site observations",
        subtitle = "95% Prediction interval")
-ggsave("ms/SI_fig5.png")
+ggsave("ms/predict_2019_new.png")
+
+
+
+# Old figure 2, don't think we're using this anymore. 
 
 # figure 2
 # multipanel figure of one site
